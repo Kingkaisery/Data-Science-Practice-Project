@@ -7,15 +7,19 @@ library(randomForest)
 train=read.csv("train.csv")
 test=read.csv("test.csv")
 
+# Combine both Train and Test Data set (to understand the distribution of independent variable together).
 test$registered=0
 test$casual=0
 test$count=0
 data=rbind(train,test)
 
+# Variable Type Identification
 str(data)
 
+# Count missing values
 sum(is.na(data))
 
+# Understand the distribution
 par(mfrow=c(4,2))
 par(mar = rep(2, 4))
 hist(data$season)
@@ -29,11 +33,15 @@ hist(data$windspeed)
 
 prop.table(table(data$weather))
 
+# Convert discrete variables into factor
 data$season=as.factor(data$season)
 data$weather=as.factor(data$weather)
 data$holiday=as.factor(data$holiday)
 data$workingday=as.factor(data$workingday)
 
+# Hypothesis Testing
+# Hourly trend: We don’t have the variable ‘hour’ with us right now. 
+# But we can extract it using the datetime column.
 data$hour=substr(data$datetime,12,13)
 data$hour=as.factor(data$hour)
 
@@ -43,25 +51,30 @@ boxplot(train$count~train$hour,xlab="hour", ylab="count of users")
 
 boxplot(log(train$count)~train$hour,xlab="hour",ylab="log(count)")
 
+# Daily Trend: Like Hour, we will generate a variable for day from datetime variable and after that we’ll plot it.
 date=substr(data$datetime,1,10)
 days<-weekdays(as.Date(date))
 data$day=days
 
+# Temperature, Windspeed and Humidity: These are continuous variables so we can look at the correlation factor to validate hypothesis.
 sub=data.frame(train$registered,train$casual,train$count,train$temp,train$humidity,train$atemp,train$windspeed)
 cor(sub)
 
+# Time: Let’s extract year of each observation from the datetime column and see the trend of bike demand over year.
 data$year=substr(data$datetime,1,4)
 data$year=as.factor(data$year)
 train=data[as.integer(substr(data$datetime,9,10))<20,]
 test=data[as.integer(substr(data$datetime,9,10))>19,]
 boxplot(train$count~train$year,xlab="year", ylab="count")
 
+# Feature Engineering
 train$hour=as.integer(train$hour) # convert hour to integer
 test$hour=as.integer(test$hour) # modifying in both train and test data set
 
 d=rpart(registered~hour,data=train)
 fancyRpartPlot(d)
 
+# Now, looking at the nodes we can create different hour bucket for registered users.
 data=rbind(train,test)
 data$dp_reg=0
 data$dp_reg[data$hour<8]=1
@@ -90,6 +103,7 @@ data$day_type[data$holiday==0 & data$workingday==1]="working day"
 data$weekend=0
 data$weekend[data$day=="Sunday" | data$day=="Saturday" ]=1
 
+# Model Building
 train$hour=as.factor(train$hour)
 test$hour=as.factor(test$hour)
 
@@ -100,13 +114,13 @@ train$logreg=log(train$reg1)
 test$logreg=0
 test$logcas=0
 
-#predicting the log of registered users.
+# predicting the log of registered users.
 set.seed(415)
 fit1 <- randomForest(logreg ~ hour +workingday+day+holiday+ day_type +temp_reg+humidity+atemp+windspeed+season+weather+dp_reg+weekend+year+year_part, data=train,importance=TRUE, ntree=250)
 pred1=predict(fit1,test)
 test$logreg=pred1
 
-#predicting the log of casual users.
+# predicting the log of casual users.
 set.seed(415)
 fit2 <- randomForest(logcas ~hour + day_type+day+humidity+atemp+temp_cas+windspeed+season+weather+holiday+workingday+dp_cas+weekend+year+year_part, data=train,importance=TRUE, ntree=250)
 pred2=predict(fit2,test)
